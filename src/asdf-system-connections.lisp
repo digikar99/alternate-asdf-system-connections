@@ -123,5 +123,7 @@
 
 ;;; ---------------------------------------------------------------------------
 
-(pushnew :alternate-asdf-system-connections *features*)
-(import 'define-system-connection :asdf)
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (pushnew :alternate-asdf-system-connections cl:*features*)
+  (import 'define-system-connection :asdf)
+  (export 'define-system-connection :asdf))
