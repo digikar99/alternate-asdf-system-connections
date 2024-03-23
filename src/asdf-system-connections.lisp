@@ -13,6 +13,31 @@
 (defclass system-connection (system)
   ((systems-required :initarg :systems-required :reader systems-required)))
 
+(define-condition dependency-feature-unsatisfied (condition)
+  ((dependency :initarg :dependency)
+   (feature :initarg :feature)))
+
+;; From alexandria
+(defun featurep (feature-expression)
+  "Returns T if the argument matches the state of the *FEATURES*
+list and NIL if it does not. FEATURE-EXPRESSION can be any atom
+or list acceptable to the reader macros #+ and #-."
+  (etypecase feature-expression
+    (symbol (not (null (member feature-expression *features*))))
+    (cons
+     (let ((first-expr (first feature-expression)))
+       (check-type first-expr symbol)
+       (cond ((string= :and first-expr)
+              (every #'featurep (rest feature-expression)))
+             ((string= :or first-expr)
+              (some #'featurep (rest feature-expression)))
+             ((string= :not first-expr)
+              (assert (= 2 (length feature-expression)))
+              (not (featurep (second feature-expression))))
+             (t
+              (error "Malformed feature expression: ~S"
+                     feature-expression)))))))
+
 ;;; ---------------------------------------------------------------------------
 
 (defun find-system-from-dep-spec (depends-on)
@@ -25,7 +50,12 @@
      (find-system
       (let ((spec (ecase (first depends-on)
                     (:version (second depends-on))
-                    (:feature (third depends-on)))))
+                    (:feature
+                     (if (featurep (second depends-on))
+                         (third depends-on)
+                         (error 'dependency-feature-unsatisfied
+                                :dependency (third depends-on)
+                                :feature (second depends-on)))))))
         (etypecase spec
           ((or string symbol) spec)
           (list
@@ -41,11 +71,14 @@
                             (component-name depends-on))))
     (when (and system depends-on)
       (some (lambda (dep)
-              (let* ((dep (find-system-from-dep-spec dep))
-                     (dep-name (component-name dep)))
-                (or (string= dep-name depends-on-name)
-                    (loop :for dep-dep :in (system-depends-on dep)
-                            :thereis (system-depends-on-p dep-dep depends-on)))))
+              (handler-case
+                  (let* ((dep (find-system-from-dep-spec dep))
+                         (dep-name (component-name dep)))
+                    (or (string= dep-name depends-on-name)
+                        (loop :for dep-dep :in (system-depends-on dep)
+                                :thereis (system-depends-on-p dep-dep
+                                                              depends-on))))
+                (dependency-feature-unsatisfied () nil)))
             (system-depends-on system)))))
 
 ;;; ---------------------------------------------------------------------------
@@ -97,19 +130,21 @@
 ;;; ---------------------------------------------------------------------------
 
 (defun load-connected-systems (operation component)
-  (let* ((component (find-system-from-dep-spec component))
-         (deps (system-depends-on component))
-         (connections (gethash (component-name component)
-                               *system-connections*)))
-    (loop :for dep :in deps
-          :do (load-connected-systems 'asdf:load-op dep))
-    (loop :for (prerequisites . connection) :in connections
-          :do (when (and (not (component-loaded-p connection))
-                         (every #'component-loaded-p prerequisites))
-                (dolist (prereq prerequisites)
-                  (dolist (dep (system-depends-on (find-system prereq)))
-                    (load-connected-systems operation dep)))
-                (asdf:oos operation connection)))))
+  (handler-case
+      (let* ((component (find-system-from-dep-spec component))
+             (deps (system-depends-on component))
+             (connections (gethash (component-name component)
+                                   *system-connections*)))
+        (loop :for dep :in deps
+              :do (load-connected-systems 'asdf:load-op dep))
+        (loop :for (prerequisites . connection) :in connections
+              :do (when (and (not (component-loaded-p connection))
+                             (every #'component-loaded-p prerequisites))
+                    (dolist (prereq prerequisites)
+                      (dolist (dep (system-depends-on (find-system prereq)))
+                        (load-connected-systems operation dep)))
+                    (asdf:oos operation connection))))
+    (dependency-feature-unsatisfied () nil)))
 
 ;;; ---------------------------------------------------------------------------
 
