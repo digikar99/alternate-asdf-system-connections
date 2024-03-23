@@ -1,7 +1,10 @@
-(in-package :asdf)
+(defpackage #:alternate-asdf-system-connections
+  (:use #:cl #:asdf)
+  (:export #:define-system-connection
+           #:system-connection
+           #:load-connected-systems))
 
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  (export '(map-system-connections defsystem-connection)))
+(in-package #:alternate-asdf-system-connections)
 
 ;;; ---------------------------------------------------------------------------
 ;;; not particularly rich person's system interconnection facility
@@ -49,7 +52,7 @@
 
 (defvar *system-connections* (make-hash-table :test 'equal))
 
-(defmacro defsystem-connection (name &body options)
+(defmacro define-system-connection (name &body options)
   (let ((requires (getf options :requires))
         (depends-on (getf options :depends-on))
         (class (getf options :class 'system-connection))
@@ -111,10 +114,14 @@
 ;;; ---------------------------------------------------------------------------
 
 (defmethod operate :after ((operation t) (component t) &key &allow-other-keys)
+  ;; Call for the system connections defined by DEFINE-SYSTEM-CONNECTION
   (when (or (eq 'asdf:load-op operation)
             (typep operation 'asdf:load-op))
-    (load-connected-systems 'asdf:load-op component)))
+    (load-connected-systems 'asdf:load-op component))
+  ;; Call for the system connections defined by DEFSYSTEM-CONNECTION
+  (asdf::load-connected-systems))
 
 ;;; ---------------------------------------------------------------------------
 
-(pushnew :asdf-system-connections *features*)
+(pushnew :alternate-asdf-system-connections *features*)
+(import 'define-system-connection :asdf)
