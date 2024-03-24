@@ -17,6 +17,9 @@
   ((dependency :initarg :dependency)
    (feature :initarg :feature)))
 
+(define-condition system-not-found (condition)
+  ((system :initarg :system)))
+
 ;; From alexandria
 (defun featurep (feature-expression)
   "Returns T if the argument matches the state of the *FEATURES*
@@ -45,7 +48,8 @@ or list acceptable to the reader macros #+ and #-."
     (system
      depends-on)
     ((or string symbol)
-     (find-system depends-on nil))
+     (or (find-system depends-on nil)
+         (error 'system-not-found :system depends-on)))
     (list
      (find-system
       (let ((spec (ecase (first depends-on)
@@ -78,7 +82,8 @@ or list acceptable to the reader macros #+ and #-."
                         (loop :for dep-dep :in (system-depends-on dep)
                                 :thereis (system-depends-on-p dep-dep
                                                               depends-on))))
-                (dependency-feature-unsatisfied () nil)))
+                (dependency-feature-unsatisfied () nil)
+                (system-not-found () nil)))
             (system-depends-on system)))))
 
 ;;; ---------------------------------------------------------------------------
