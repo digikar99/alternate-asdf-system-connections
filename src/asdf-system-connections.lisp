@@ -15,10 +15,17 @@
 
 (define-condition dependency-feature-unsatisfied (condition)
   ((dependency :initarg :dependency)
-   (feature :initarg :feature)))
+   (feature :initarg :feature))
+  (:report (lambda (condition stream)
+             (with-slots (dependency feature) condition
+               (format stream "Feature expression~%  ~S~%unsatisfied for system~%  ~S"
+                       feature dependency)))))
 
 (define-condition system-not-found (condition)
-  ((system :initarg :system)))
+  ((system :initarg :system))
+  (:report (lambda (condition stream)
+             (with-slots (system) condition
+               (format stream "Unable to find system ~A" system)))))
 
 ;; From alexandria
 (defun featurep (feature-expression)
