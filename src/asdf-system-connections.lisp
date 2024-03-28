@@ -126,18 +126,14 @@ or list acceptable to the reader macros #+ and #-."
                             (requires
                               (sort (mapcar #'system-name requires) #'string<)))
                        `(let* ((,prerequisites
-                                 (remove-if
-                                  (lambda (,req)
-                                    (system-depends-on-p ,req ',r))
-                                  (remove ',r ',requires
-                                          :test #'string=)))
+                                 (remove ',r ',requires
+                                         :test #'string=))
                                (,connections
                                  (append (gethash ',r *system-connections*)
                                          (list (cons ,prerequisites
-                                                ',name)))))
-                          (when ,prerequisites
-                            (setf (gethash ',r *system-connections*)
-                                  ,connections))))))
+                                                     ',name)))))
+                          (setf (gethash ',r *system-connections*)
+                                ,connections)))))
                  requires)
        (values ',name))))
 
@@ -149,14 +145,19 @@ or list acceptable to the reader macros #+ and #-."
              (deps (system-depends-on component))
              (connections (gethash (component-name component)
                                    *system-connections*)))
+        ;; Load connections of dependencies of this system
         (loop :for dep :in deps
               :do (load-connected-systems 'asdf:load-op dep))
         (loop :for (prerequisites . connection) :in connections
               :do (when (and (not (component-loaded-p connection))
                              (every #'component-loaded-p prerequisites))
                     (dolist (prereq prerequisites)
-                      (dolist (dep (system-depends-on (find-system prereq)))
-                        (load-connected-systems operation dep)))
+                      (unless (system-depends-on-p prereq component)
+                        ;; Do not recurse if PREREQ depends on COMPONENT
+                        (dolist (dep (system-depends-on (find-system prereq)))
+                          ;; Load connections of dependencies of other prerequisites
+                          (load-connected-systems operation dep))))
+                    ;; Load connection
                     (asdf:oos operation connection))))
     (dependency-feature-unsatisfied () nil)))
 
