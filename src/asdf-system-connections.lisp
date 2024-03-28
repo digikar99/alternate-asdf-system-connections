@@ -76,7 +76,9 @@ or list acceptable to the reader macros #+ and #-."
 
 (defun system-depends-on-p (system depends-on)
   "Returns non-NIL if DEPENDS-ON is a dependency of SYSTEM."
-  (let* ((system (find-system-from-dep-spec system))
+  (let* ((system (handler-case (find-system-from-dep-spec system)
+                   (system-not-found ()
+                     (return-from system-depends-on-p nil))))
          (depends-on (find-system-from-dep-spec depends-on))
          (depends-on-name (when depends-on
                             (component-name depends-on))))
