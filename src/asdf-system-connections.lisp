@@ -134,26 +134,33 @@ or list acceptable to the reader macros #+ and #-."
 
 ;;; ---------------------------------------------------------------------------
 
+(defun all-necessary-connections-loaded-p (connections)
+  (declare (type list connections))
+  (loop :for (prerequisites . connection) :in connections
+        :always (if (every #'component-loaded-p prerequisites)
+                    (component-loaded-p connection)
+                    t)))
+
 (defun load-connected-systems (operation component)
   (handler-case
       (let* ((component (find-system-from-dep-spec component))
-             (deps (system-depends-on component))
-             (connections (gethash (component-name component)
-                                   *system-connections*)))
-        ;; Load connections of dependencies of this system
-        (loop :for dep :in deps
-              :do (load-connected-systems 'asdf:load-op dep))
-        (loop :for (prerequisites . connection) :in connections
-              :do (when (and (not (component-loaded-p connection))
-                             (every #'component-loaded-p prerequisites))
-                    (dolist (prereq prerequisites)
-                      (unless (system-depends-on-p prereq component)
-                        ;; Do not recurse if PREREQ depends on COMPONENT
-                        (dolist (dep (system-depends-on (find-system prereq)))
-                          ;; Load connections of dependencies of other prerequisites
-                          (load-connected-systems operation dep))))
-                    ;; Load connection
-                    (asdf:oos operation connection))))
+             (connections (gethash (component-name component) *system-connections*))
+             (deps (system-depends-on component)))
+        (when (not (all-necessary-connections-loaded-p connections))
+          ;; Load connections of dependencies of this system
+          (loop :for dep :in deps
+                :do (load-connected-systems operation dep))
+          (loop :for (prerequisites . connection) :in connections
+                :do (when (and (not (component-loaded-p connection))
+                               (every #'component-loaded-p prerequisites))
+                      (dolist (prereq prerequisites)
+                        (unless (system-depends-on-p prereq component)
+                          ;; Do not recurse if PREREQ depends on COMPONENT
+                          (dolist (dep (system-depends-on (find-system prereq)))
+                            ;; Load connections of dependencies of other prerequisites
+                            (load-connected-systems operation dep))))
+                      ;; Load connection
+                      (asdf:oos operation connection)))))
     (dependency-feature-unsatisfied () nil)))
 
 ;;; ---------------------------------------------------------------------------
