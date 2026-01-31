@@ -103,7 +103,6 @@ or list acceptable to the reader macros #+ and #-."
   (let ((requires (getf options :requires))
         (depends-on (getf options :depends-on))
         (class (getf options :class 'system-connection))
-        (connections (gensym "CONNECTIONS"))
         (prerequisites (gensym "PREREQUISITES")))
     (remf options :requires)
     (remf options :class)
@@ -121,19 +120,15 @@ or list acceptable to the reader macros #+ and #-."
                               (symbol (string-downcase (symbol-name s)))
                               (asdf:component (asdf:component-name s)))))
                      (let* ((r    (system-name r))
-                            (req  (gensym "REQ"))
                             (name (system-name name))
                             (requires
                               (sort (mapcar #'system-name requires) #'string<)))
                        `(let* ((,prerequisites
                                  (remove ',r ',requires
-                                         :test #'string=))
-                               (,connections
-                                 (append (gethash ',r *system-connections*)
-                                         (list (cons ,prerequisites
-                                                     ',name)))))
-                          (setf (gethash ',r *system-connections*)
-                                ,connections)))))
+                                         :test #'string=)))
+                          (pushnew (cons ,prerequisites ',name)
+                                   (gethash ',r *system-connections*)
+                                   :test #'equal)))))
                  requires)
        (values ',name))))
 
